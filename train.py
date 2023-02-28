@@ -12,7 +12,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torchvision import datasets, transforms, models
-from model import ResNet18
+from model import ResNet18, Conv6
 DEBUG = 1
 
 def dbg_print(s):
@@ -24,13 +24,19 @@ def dbg_print(s):
 from collections import OrderedDict
 
 def train(model, device, train_loader, criterion, epochs, test_loader):
-    optimizer = optim.SGD(model.parameters(), lr=0.05,
-                                        momentum=0.9, weight_decay=0.0005)
-    scheduler = CosineAnnealingLR(optimizer, T_max=30)
+    lr = 0.05
+    momentum = 0.9
+    weight_decay=4e-5
+    optimizer = optim.SGD(model.parameters(), lr=lr,
+                                        momentum=momentum, weight_decay=weight_decay)
+    #scheduler = CosineAnnealingLR(optimizer, T_max=epochs)
     model.train()
+    print(optimizer)
+    #print(scheduler)
+    print("epoch, runningloss, loss, accuracy")
     for epoch in range(1, epochs+1):
         runningloss = 0
-        for batch_idx, (data, target) in enumerate(train_loader):
+        for data, target in train_loader:
             data, target = data.to(device), target.to(device)
             optimizer.zero_grad()
             output = model(data)
@@ -40,7 +46,7 @@ def train(model, device, train_loader, criterion, epochs, test_loader):
             runningloss += loss.item()
         runningloss /= len(train_loader)
         loss, accuracy = test(model, device, criterion, test_loader)
-        scheduler.step()
+        #scheduler.step()
         print(f"{epoch}, {runningloss}, {loss}, {accuracy}")
 
 def test(model, device, criterion, test_loader):
@@ -71,9 +77,12 @@ def main():
                                     transform=transforms.Compose([
                                         transforms.RandomCrop(32, padding=4),
                                         transforms.RandomHorizontalFlip(),
+                                        transforms.ColorJitter(0.5, 0.5, 0.5, 0.5),
+                                        transforms.RandomRotation(10),
                                         transforms.ToTensor(),
                                         transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
                                     ]))
+    print(train_dataset)
     test_dataset = datasets.CIFAR10(os.path.join('../data', 'cifar10'), train=False,
                                     transform=transforms.Compose([
                                         transforms.ToTensor(),
@@ -85,12 +94,13 @@ def main():
     test_loader = torch.utils.data.DataLoader(
         test_dataset[0], batch_size=100, shuffle=False, **kwargs)
     
-    model = ResNet18()
+    #model = ResNet18()
+    model = Conv6()
 
     model = model.to(device)
     # NOTE: only pass the parameters where p.requires_grad == True to the optimizer! Important!
     criterion = nn.CrossEntropyLoss()
-    train(model, device, train_loader, criterion, 30, test_loader)
+    train(model, device, train_loader, criterion, 60, test_loader)
 
 if __name__ == '__main__':
     main()

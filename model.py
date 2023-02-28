@@ -98,3 +98,98 @@ class ResNet(nn.Module):
 
 def ResNet18():
     return ResNet(BasicBlock, [2, 2, 2, 2])
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+
+class KaimingConv(nn.Conv2d):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # NOTE: initialize the weights like this.
+        nn.init.kaiming_normal_(self.weight, mode="fan_in", nonlinearity="relu")
+        nn.Parameter(self.weight)
+
+    def forward(self, x):
+        x = F.conv2d(
+            x, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups
+        )
+        return x
+
+class KaimingLinear(nn.Linear):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+
+        # NOTE: initialize the weights like this.
+        nn.init.kaiming_normal_(self.weight, mode="fan_in", nonlinearity="relu")
+        nn.Parameter(self.weight)
+        nn.Parameter(self.bias)
+
+    def forward(self, x):
+        return F.linear(x, self.weight, self.bias)
+
+# NOTE: We use non affine batch norm
+class NonAffineBatchNorm(nn.BatchNorm2d):
+    def __init__(self, dim):
+        super(NonAffineBatchNorm, self).__init__(dim, affine=False)
+
+class HasAffineBatchNorm(nn.BatchNorm2d):
+    def __init__(self, dim):
+        super(HasAffineBatchNorm, self).__init__(dim, affine=True)
+
+class Conv6(nn.Module):
+    def __init__(self):
+        super(Conv6, self).__init__()
+        self.conv1 = KaimingConv(3, 64, 3, stride=1, padding=1, bias=False)
+        self.bn1 = HasAffineBatchNorm(64)
+        self.conv2 = KaimingConv(64, 64, 3, stride=1, padding=1, bias=False)
+        self.bn2 = HasAffineBatchNorm(64)
+        self.conv3 = KaimingConv(64, 128, 3, stride=1, padding=1, bias=False)
+        self.bn3 = HasAffineBatchNorm(128)
+        self.conv4 = KaimingConv(128, 128, 3, stride=1, padding=1, bias=False)
+        self.bn4 = HasAffineBatchNorm(128)
+        self.conv5 = KaimingConv(128, 256, 3, stride=1, padding=1, bias=False)
+        self.bn5 = HasAffineBatchNorm(256)
+        self.conv6 = KaimingConv(256, 256, 3, stride=1, padding=1, bias=False)
+        self.bn6 = HasAffineBatchNorm(256)
+        self.fc1 = KaimingLinear(4*4*256, 256, bias=False)
+        self.bn7 = nn.BatchNorm1d(num_features=256, affine=False)
+        self.fc2 = KaimingLinear(256, 256, bias=False)
+        self.bn8 = nn.BatchNorm1d(num_features=256, affine=False)
+        self.fc3 = KaimingLinear(256, 10, bias=False)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = F.relu(x)
+        x = self.conv2(x)
+        x = self.bn2(x)
+        x = F.relu(x)
+        x = F.max_pool2d(x, 2)
+        x = self.conv3(x)
+        x = self.bn3(x)
+        x = F.relu(x)
+        x = self.conv4(x)
+        x = self.bn4(x)
+        x = F.relu(x)
+        x = F.max_pool2d(x, 2)
+        x = self.conv5(x)
+        x = self.bn5(x)
+        x = F.relu(x)
+        x = self.conv6(x)
+        x = self.bn6(x)
+        x = F.relu(x)
+        x = F.max_pool2d(x, 2)
+        x = torch.flatten(x, 1)
+        x = self.fc1(x)
+        x = self.bn7(x)
+        x = F.relu(x)
+        x = self.fc2(x)
+        x = self.bn8(x)
+        x = F.relu(x)
+        output = self.fc3(x)
+        #output = F.log_softmax(x, dim=1)
+        return output
